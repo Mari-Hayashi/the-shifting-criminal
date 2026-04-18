@@ -565,6 +565,14 @@ input {
     padding: 24px 14px 40px;
   }
 
+  .table-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .table-layout.is-lobby-layout .players-panel {
+    grid-column: auto;
+  }
+
   .panel-header {
     flex-direction: column;
     align-items: stretch;

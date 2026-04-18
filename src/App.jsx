@@ -602,10 +602,15 @@ function App() {
   const canSubmitDetectiveGuess =
     status === "Connected" &&
     gameState.pendingDetectiveGuess?.waitingForGuess &&
-    Boolean(detectiveTargetId) &&
+    Boolean(
+      detectiveTargetId ||
+        gameState.pendingDetectiveGuess?.selectedTargetPlayerId
+    ) &&
     !gameState.wrongGuessNotice;
   const syncedDetectiveTargetId =
     gameState.pendingDetectiveGuess?.selectedTargetPlayerId ?? "";
+  const effectiveDetectiveTargetId =
+    detectiveTargetId || syncedDetectiveTargetId;
   const syncedEyewitnessTargetId =
     gameState.pendingEyewitness?.targetPlayerId ?? "";
   const canAttemptReconnect =
@@ -673,7 +678,7 @@ function App() {
     socket.send(
       JSON.stringify({
         type: "detective_guess",
-        targetPlayerId: detectiveTargetId
+        targetPlayerId: effectiveDetectiveTargetId
       })
     );
     setDetectiveTargetId("");
@@ -1071,7 +1076,7 @@ function App() {
               <select
                 value={
                   gameState.pendingDetectiveGuess.waitingForGuess
-                    ? detectiveTargetId
+                    ? effectiveDetectiveTargetId
                     : syncedDetectiveTargetId
                 }
                 onChange={(event) =>
