@@ -346,11 +346,12 @@ input {
   color: #fff;
 }
 
-.hand-grid {
+.hand-panel .hand-grid {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 14px;
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow: visible;
   padding: 4px 2px 10px;
   padding-bottom: 8px;
 }
@@ -376,7 +377,8 @@ input {
 
 .reveal-hand-grid {
   margin-top: 18px;
-  flex-wrap: wrap;
+  justify-content: center;
+  flex-wrap: nowrap;
   gap: 12px;
 }
 
@@ -385,9 +387,10 @@ input {
   border-radius: 16px;
 }
 
-.hand-card {
+.hand-panel .hand-card {
   display: block;
-  flex: 0 0 150px;
+  flex: 1 1 120px;
+  max-width: 150px;
   margin: 2px;
   border: 1px solid rgba(188, 196, 226, 0.14);
   border-radius: 22px;
@@ -456,12 +459,14 @@ input {
 
 .detective-modal {
   width: min(100%, 460px);
+  max-height: min(100vh - 40px, 820px);
   border: 1px solid rgba(188, 196, 226, 0.22);
   border-radius: 28px;
   background: rgba(48, 55, 76, 0.96);
   box-shadow: 0 24px 80px rgba(18, 24, 43, 0.38);
   padding: 24px;
   color: #f5f7ff;
+  overflow-y: auto;
 }
 
 .detective-modal p {
@@ -581,5 +586,59 @@ input {
   .name-box {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .modal-backdrop {
+    padding: 10px;
+    align-items: center;
+  }
+
+  .detective-modal {
+    max-height: calc(100vh - 20px);
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .modal-card-image {
+    width: min(110px, 100%);
+    margin: 10px auto 16px;
+  }
+
+  .reveal-hand-grid {
+    margin-top: 14px;
+    gap: 8px;
+  }
+
+  .reveal-card {
+    width: 72px;
+  }
+
+  .modal-hand-grid {
+    gap: 8px;
+    padding: 4px 0 2px;
+  }
+
+  .modal-hand-grid .hand-card {
+    flex: 0 1 78px;
+    width: 78px;
+    padding: 3px;
+  }
+
+  .hand-panel .hand-grid {
+    gap: 10px;
+  }
+
+  .hand-panel .hand-card {
+    flex-basis: 84px;
+    max-width: 108px;
+    padding: 4px;
+  }
+
+  .rumor-card-image {
+    width: min(76px, 100%);
+  }
+
+  .rumor-arrow-image {
+    width: 30px;
   }
 }

@@ -1206,10 +1206,12 @@ function handlePlayCard(room, socket, playerId, payload) {
   if (card.type === CARD_TYPES.DEAL) {
     const exchangeEligiblePlayers = getExchangeEligiblePlayers(room, playerId);
 
-    if (exchangeEligiblePlayers.length === 0) {
+    if (player.hand.length === 0 || exchangeEligiblePlayers.length === 0) {
       addLogEntry(
         room,
-        `${getDisplayName(room, playerId)} played Deal, but no other player had cards to exchange.`
+        player.hand.length === 0
+          ? `${getDisplayName(room, playerId)} played Deal, but had no card left to exchange.`
+          : `${getDisplayName(room, playerId)} played Deal, but no other player had cards to exchange.`
       );
       room.turnsTakenInRound += 1;
 
@@ -1661,6 +1663,26 @@ function handleDealTargetSelection(room, socket, playerId, payload) {
   }
 
   const targetPlayerId = String(payload.targetPlayerId ?? "");
+  const dealPlayer = room.players.get(playerId);
+
+  if (!dealPlayer || dealPlayer.hand.length === 0) {
+    room.pendingDeal = null;
+    addLogEntry(
+      room,
+      `${getDisplayName(room, playerId)} cannot exchange after playing Deal because no cards remain in hand.`
+    );
+    room.turnsTakenInRound += 1;
+
+    if (room.turnsTakenInRound >= getPlayableParticipants(room).length) {
+      room.roundNumber += 1;
+      room.turnsTakenInRound = 0;
+      addLogEntry(room, `Round ${room.roundNumber} begins.`);
+    }
+
+    advanceTurn(room);
+    broadcastState(room);
+    return;
+  }
 
   if (!targetPlayerId || targetPlayerId === playerId) {
     sendError(socket, "Choose another player to exchange with.");
