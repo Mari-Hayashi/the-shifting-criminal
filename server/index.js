@@ -7,7 +7,7 @@ import { WebSocketServer } from "ws";
 const PORT = process.env.PORT || 3001;
 const MIN_PLAYERS = 3;
 const MAX_PLAYERS = 7;
-const CARDS_PER_PLAYER = 4;
+const MIN_INITIAL_CARD_COUNT = 4;
 const RECONNECT_GRACE_PERIOD_MS = 3 * 60 * 1000;
 const ROOM_ID_PATTERN = /^[A-Z]{4}$/;
 const CARD_TYPES = {
@@ -15,6 +15,7 @@ const CARD_TYPES = {
   FIRST_DISCOVERER: "First Discoverer",
   DETECTIVE: "Detective",
   ALIBI: "Alibi",
+  BOY: "Boy",
   DEAL: "Deal",
   EYEWITNESS: "Eyewitness",
   INTRIGUE: "Intrigue",
@@ -25,6 +26,7 @@ const CARD_TYPES = {
 const CARD_SET_BREAKDOWN = {
   [CARD_TYPES.CRIMINAL]: 1,
   [CARD_TYPES.FIRST_DISCOVERER]: 1,
+  [CARD_TYPES.BOY]: 1,
   [CARD_TYPES.MAN]: 2,
   [CARD_TYPES.INTRIGUE]: 2,
   [CARD_TYPES.EYEWITNESS]: 3,
@@ -38,6 +40,14 @@ const DEFAULT_NAMES_FILE = join(process.cwd(), "server", "default-player-names.t
 const DIST_DIR = join(process.cwd(), "dist");
 const DIST_INDEX_FILE = join(DIST_DIR, "index.html");
 const DEFAULT_PLAYER_NAMES = loadDefaultPlayerNames();
+const TOTAL_CARD_COUNT = Object.values(CARD_SET_BREAKDOWN).reduce(
+  (sum, count) => sum + count,
+  0
+);
+const DEFAULT_ROOM_OPTIONS = {
+  initialCardCount: MIN_INITIAL_CARD_COUNT,
+  useRandomSetOfCards: false
+};
 
 const app = express();
 const server = createServer(app);
@@ -61,6 +71,7 @@ function createRoom(roomId) {
   return {
     id: roomId,
     defaultNameOrder: shuffle(DEFAULT_PLAYER_NAMES),
+    options: { ...DEFAULT_ROOM_OPTIONS },
     players: new Map(),
     phase: "lobby",
     currentPlayerId: null,
@@ -74,6 +85,7 @@ function createRoom(roomId) {
     turnsTakenInRound: 0,
     pendingDetectiveGuess: null,
     pendingDeal: null,
+    pendingBoy: null,
     pendingEyewitness: null,
     pendingMediaManipulation: null,
     dealNotice: null,
@@ -84,7 +96,8 @@ function createRoom(roomId) {
     rumorNoticeTimeout: null,
     mediaManipulationNotice: null,
     mediaManipulationNoticeTimeout: null,
-    intriguePlayerIds: []
+    intriguePlayerIds: [],
+    roundHasCriminalCard: true
   };
 }
 
@@ -143,11 +156,54 @@ function getNextTurnEligiblePlayerIds(room) {
     .map((player) => player.id);
 }
 
+function getMaxInitialCardCount(playerCount) {
+  if (playerCount <= 0) {
+    return TOTAL_CARD_COUNT;
+  }
+
+  return Math.floor(TOTAL_CARD_COUNT / playerCount);
+}
+
+function validateRoomOptions(room, nextOptions) {
+  const connectedPlayerCount = Math.max(getConnectedPlayers(room).length, 1);
+  const initialCardCount = Number(nextOptions.initialCardCount);
+  const maxInitialCardCount = getMaxInitialCardCount(connectedPlayerCount);
+
+  if (!Number.isInteger(initialCardCount)) {
+    return {
+      message:
+        "Initial card count must be a whole number.",
+      messageKey: "initialCardCountWholeNumber"
+    };
+  }
+
+  if (initialCardCount < MIN_INITIAL_CARD_COUNT) {
+    return {
+      message: `Initial card count must be at least ${MIN_INITIAL_CARD_COUNT}.`,
+      messageKey: "initialCardCountTooSmall",
+      params: { min: MIN_INITIAL_CARD_COUNT }
+    };
+  }
+
+  if (initialCardCount > maxInitialCardCount) {
+    return {
+      message: `Initial card count cannot be greater than ${maxInitialCardCount} for the current player count.`,
+      messageKey: "initialCardCountTooLarge",
+      params: { max: maxInitialCardCount }
+    };
+  }
+
+  return null;
+}
+
 function canStartGame(room) {
+  const optionsError = validateRoomOptions(room, room.options);
+
   return (
     room.phase !== "playing" &&
     getConnectedPlayers(room).length >= MIN_PLAYERS &&
-    room.players.size <= MAX_PLAYERS
+    room.players.size <= MAX_PLAYERS &&
+    !optionsError
   );
 }
 
@@ -230,15 +286,18 @@ function getMustUseCardTypes(playerCount) {
   ];
 }
 
-function buildDeck(playerCount) {
-  const totalCards = playerCount * CARDS_PER_PLAYER;
-  const mustUseCardTypes = getMustUseCardTypes(playerCount);
+function buildDeck(playerCount, initialCardCount, useRandomSetOfCards) {
+  const totalCards = playerCount * initialCardCount;
   const remainingCounts = { ...CARD_SET_BREAKDOWN };
   const deck = [];
 
-  for (const type of mustUseCardTypes) {
-    remainingCounts[type] -= 1;
-    deck.push(createCard(type));
+  if (!useRandomSetOfCards) {
+    const mustUseCardTypes = getMustUseCardTypes(playerCount);
+
+    for (const type of mustUseCardTypes) {
+      remainingCounts[type] -= 1;
+      deck.push(createCard(type));
+    }
   }
 
   const remainingPool = [];
@@ -362,6 +421,8 @@ function broadcastState(room) {
         canStart: canStartGame(room),
         currentPlayerId: room.currentPlayerId,
         players: gamePlayers,
+        totalCardCount: TOTAL_CARD_COUNT,
+        options: room.options,
         yourName: self?.name ?? "",
         yourHand: self?.hand ?? [],
         discardPile: room.discardPile,
@@ -456,6 +517,26 @@ function broadcastState(room) {
               yourSubmitted:
                 room.pendingDeal.stage === "card_selection" &&
                 Boolean(room.pendingDeal.submittedBy[session.playerId])
+            }
+          : null,
+        pendingBoy: room.pendingBoy
+          ? {
+              boyPlayerId: room.pendingBoy.boyPlayerId,
+              boyPlayerName: getDisplayName(room, room.pendingBoy.boyPlayerId),
+              yourRole:
+                room.pendingBoy.boyPlayerId === session.playerId
+                  ? "boy_player"
+                  : "observer",
+              showingReveal: true,
+              hasCriminal: room.pendingBoy.hasCriminal,
+              criminalPlayerName:
+                room.pendingBoy.boyPlayerId === session.playerId
+                  ? room.pendingBoy.criminalPlayerName
+                  : "",
+              criminalPlayerId:
+                room.pendingBoy.boyPlayerId === session.playerId
+                  ? room.pendingBoy.criminalPlayerId
+                  : null
             }
           : null,
         pendingEyewitness: room.pendingEyewitness
@@ -601,11 +682,20 @@ function advanceTurn(room) {
   if (eligiblePlayerIds.length === 0) {
     room.phase = "finished";
     room.currentPlayerId = null;
-    room.winner = {
-      reason: "no_cards_remaining",
-      message: "The round ended because no player had any cards left to play.",
-      winners: []
-    };
+    room.winner = room.roundHasCriminalCard
+      ? {
+          reason: "no_cards_remaining",
+          message: "The round ended because no player had any cards left to play.",
+          winners: []
+        }
+      : {
+          reason: "no_criminal_in_round",
+          message:
+            "No Criminal card was used this round, so players on the Criminal side lose.",
+          winners: room.turnOrder.filter(
+            (playerId) => !room.intriguePlayerIds.includes(playerId)
+          )
+        };
     addLogEntry(room, room.winner.message);
     return;
   }
@@ -638,6 +728,7 @@ function advanceTurn(room) {
 function clearTransientStateOnFinish(room) {
   room.pendingDetectiveGuess = null;
   room.pendingDeal = null;
+  room.pendingBoy = null;
   room.pendingEyewitness = null;
   room.pendingMediaManipulation = null;
   room.dealNotice = null;
@@ -706,7 +797,11 @@ function initializeGame(room) {
   const activePlayers = getConnectedPlayers(room).filter(
     (player) => !player.spectator
   );
-  const deck = buildDeck(activePlayers.length);
+  const deck = buildDeck(
+    activePlayers.length,
+    room.options.initialCardCount,
+    room.options.useRandomSetOfCards
+  );
   const shuffledPlayerIds = shuffle(activePlayers.map((player) => player.id));
 
   room.phase = "playing";
@@ -719,6 +814,9 @@ function initializeGame(room) {
   room.roundNumber = 1;
   room.turnsTakenInRound = 0;
   room.intriguePlayerIds = [];
+  room.roundHasCriminalCard = deck.some(
+    (card) => card.type === CARD_TYPES.CRIMINAL
+  );
   clearTransientStateOnFinish(room);
 
   for (const player of room.players.values()) {
@@ -729,7 +827,11 @@ function initializeGame(room) {
     clearPlayerDisconnectTimer(player);
   }
 
-  for (let cardIndex = 0; cardIndex < CARDS_PER_PLAYER; cardIndex += 1) {
+  for (
+    let cardIndex = 0;
+    cardIndex < room.options.initialCardCount;
+    cardIndex += 1
+  ) {
     for (const playerId of shuffledPlayerIds) {
       const player = room.players.get(playerId);
       player.hand.push(deck.shift());
@@ -773,6 +875,7 @@ function resetToLobby(room) {
   room.roundNumber = 0;
   room.turnsTakenInRound = 0;
   room.intriguePlayerIds = [];
+  room.roundHasCriminalCard = true;
 
   for (const [id, player] of room.players.entries()) {
     if (!player.connected) {
@@ -880,6 +983,24 @@ function completeEyewitnessReveal(room) {
   }
 
   room.pendingEyewitness = null;
+  room.turnsTakenInRound += 1;
+
+  if (room.turnsTakenInRound >= getPlayableParticipants(room).length) {
+    room.roundNumber += 1;
+    room.turnsTakenInRound = 0;
+    addLogEntry(room, `Round ${room.roundNumber} begins.`);
+  }
+
+  advanceTurn(room);
+  broadcastState(room);
+}
+
+function completeBoyReveal(room) {
+  if (!room.pendingBoy) {
+    return;
+  }
+
+  room.pendingBoy = null;
   room.turnsTakenInRound += 1;
 
   if (room.turnsTakenInRound >= getPlayableParticipants(room).length) {
@@ -1046,6 +1167,43 @@ function handleSetName(room, socket, playerId, payload) {
   broadcastState(room);
 }
 
+function handleSetOptions(room, socket, playerId, payload) {
+  const player = room.players.get(playerId);
+
+  if (!player) {
+    sendError(socket, "Player not found.");
+    return;
+  }
+
+  if (room.phase === "playing") {
+    sendError(socket, "Options can only be changed in the lobby.");
+    return;
+  }
+
+  const nextOptions = {
+    initialCardCount: Number(payload.initialCardCount),
+    useRandomSetOfCards: Boolean(payload.useRandomSetOfCards)
+  };
+  const validationError = validateRoomOptions(room, nextOptions);
+
+  if (validationError) {
+    sendErrorKey(
+      socket,
+      validationError.messageKey,
+      validationError.params ?? {},
+      validationError.message
+    );
+    return;
+  }
+
+  room.options = nextOptions;
+  addLogEntry(
+    room,
+    `${getDisplayName(room, playerId)} updated the room options.`
+  );
+  broadcastState(room);
+}
+
 function handlePlayCard(room, socket, playerId, payload) {
   const player = room.players.get(playerId);
 
@@ -1075,6 +1233,11 @@ function handlePlayCard(room, socket, playerId, payload) {
 
   if (room.pendingDeal) {
     sendError(socket, "A Deal exchange is still pending.");
+    return;
+  }
+
+  if (room.pendingBoy) {
+    sendError(socket, "A Boy reveal is still pending.");
     return;
   }
 
@@ -1142,7 +1305,7 @@ function handlePlayCard(room, socket, playerId, payload) {
   }
 
   const hasAllDetectiveOpeningHand =
-    player.openingHandTypes?.length === CARDS_PER_PLAYER &&
+    player.openingHandTypes?.length === MIN_INITIAL_CARD_COUNT &&
     player.openingHandTypes.every(
       (handCardType) => handCardType === CARD_TYPES.DETECTIVE
     );
@@ -1236,6 +1399,27 @@ function handlePlayCard(room, socket, playerId, payload) {
     addLogEntry(
       room,
       `${getDisplayName(room, playerId)} played Deal and is choosing a player to exchange with.`
+    );
+    broadcastState(room);
+    return;
+  }
+
+  if (card.type === CARD_TYPES.BOY) {
+    const criminalHolder = getPlayableParticipants(room).find((activePlayer) =>
+      activePlayer.hand.some((handCard) => handCard.type === CARD_TYPES.CRIMINAL)
+    );
+
+    room.pendingBoy = {
+      boyPlayerId: playerId,
+      hasCriminal: Boolean(criminalHolder),
+      criminalPlayerId: criminalHolder?.id ?? null,
+      criminalPlayerName: criminalHolder
+        ? getDisplayName(room, criminalHolder.id)
+        : ""
+    };
+    addLogEntry(
+      room,
+      `${getDisplayName(room, playerId)} played Boy and is checking who holds the Criminal card.`
     );
     broadcastState(room);
     return;
@@ -1647,6 +1831,24 @@ function handleEyewitnessRevealComplete(room, socket, playerId) {
   completeEyewitnessReveal(room);
 }
 
+function handleBoyRevealComplete(room, socket, playerId) {
+  if (!ensureNoDisconnectedPlayers(room, socket)) {
+    return;
+  }
+
+  if (!room.pendingBoy) {
+    sendError(socket, "There is no Boy reveal in progress.");
+    return;
+  }
+
+  if (room.pendingBoy.boyPlayerId !== playerId) {
+    sendError(socket, "Only the Boy player can close this reveal.");
+    return;
+  }
+
+  completeBoyReveal(room);
+}
+
 function handleDealTargetSelection(room, socket, playerId, payload) {
   if (!ensureNoDisconnectedPlayers(room, socket)) {
     return;
@@ -1927,10 +2129,19 @@ wss.on("connection", (socket) => {
 
       if (message.type === "start_game") {
         if (!canStartGame(room)) {
-          sendError(
-            socket,
-            `You need at least ${MIN_PLAYERS} players and no active round to start a game.`
-          );
+          const optionsError = validateRoomOptions(room, room.options);
+
+          if (optionsError) {
+            sendErrorKey(
+              socket,
+              optionsError.messageKey,
+              optionsError.params ?? {},
+              optionsError.message
+            );
+            return;
+          }
+
+          sendError(socket, `You need at least ${MIN_PLAYERS} players and no active round to start a game.`);
           return;
         }
 
@@ -1941,6 +2152,11 @@ wss.on("connection", (socket) => {
 
       if (message.type === "set_name") {
         handleSetName(room, socket, activePlayerId, message);
+        return;
+      }
+
+      if (message.type === "set_options") {
+        handleSetOptions(room, socket, activePlayerId, message);
         return;
       }
 
@@ -1986,6 +2202,11 @@ wss.on("connection", (socket) => {
 
       if (message.type === "eyewitness_finish_reveal") {
         handleEyewitnessRevealComplete(room, socket, activePlayerId);
+        return;
+      }
+
+      if (message.type === "boy_finish_reveal") {
+        handleBoyRevealComplete(room, socket, activePlayerId);
         return;
       }
 
