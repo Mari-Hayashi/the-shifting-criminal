@@ -3,6 +3,7 @@ import backCard from "./assets/Back.png";
 import alibiCard from "./assets/Alibi.png";
 import arrowLeftImage from "./assets/arrow_left.png";
 import backgroundImage from "./assets/Background.png";
+import boyCard from "./assets/Boy.png";
 import criminalCard from "./assets/Criminal.png";
 import dealCard from "./assets/Deal.png";
 import detectiveCard from "./assets/Detective.png";
@@ -42,6 +43,8 @@ function ensureRoomIdFromLocation() {
 const CARD_TEXT = {
   Alibi:
     "No action when played. While you still hold Alibi with Criminal, Detective guesses against you fail.",
+  Boy:
+    "Privately learn who has the Criminal card, even if that player also has Alibi.",
   Criminal:
     "You can only play this when it is the last card in your hand. If you do, you win.",
   "First Discoverer":
@@ -61,6 +64,7 @@ const CARD_TEXT = {
 
 const CARD_IMAGES = {
   Alibi: alibiCard,
+  Boy: boyCard,
   Criminal: criminalCard,
   Deal: dealCard,
   Detective: detectiveCard,
@@ -104,8 +108,13 @@ function App() {
   const [gameState, setGameState] = useState({
     phase: "lobby",
     canStart: false,
+    options: {
+      initialCardCount: 4,
+      useRandomSetOfCards: false
+    },
     currentPlayerId: null,
     players: [],
+    totalCardCount: 31,
     yourName: "",
     yourHand: [],
     discardPile: [],
@@ -118,6 +127,7 @@ function App() {
     mediaManipulationNotice: null,
     rumorNotice: null,
     pendingDeal: null,
+    pendingBoy: null,
     pendingEyewitness: null,
     pendingMediaManipulation: null,
     pendingDetectiveGuess: null,
@@ -133,12 +143,19 @@ function App() {
   const [nameInput, setNameInput] = useState("");
   const [showPendingActionModal, setShowPendingActionModal] = useState(false);
   const [showPendingDealModal, setShowPendingDealModal] = useState(false);
+  const [showPendingBoyModal, setShowPendingBoyModal] = useState(false);
   const [showPendingEyewitnessModal, setShowPendingEyewitnessModal] =
     useState(false);
   const [showPendingMediaModal, setShowPendingMediaModal] = useState(false);
   const [showDealResultModal, setShowDealResultModal] = useState(false);
   const [showMediaResultModal, setShowMediaResultModal] = useState(false);
   const [showRumorModal, setShowRumorModal] = useState(false);
+  const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [optionsForm, setOptionsForm] = useState({
+    initialCardCount: "4",
+    useRandomSetOfCards: false
+  });
+  const [optionsError, setOptionsError] = useState("");
   const [visibleHand, setVisibleHand] = useState([]);
   const [dealTargetId, setDealTargetId] = useState("");
   const [eyewitnessTargetId, setEyewitnessTargetId] = useState("");
@@ -147,6 +164,7 @@ function App() {
   const socketRef = useRef(null);
   const previousPendingActionPlayerIdRef = useRef(null);
   const previousPendingDealPlayerIdRef = useRef(null);
+  const previousPendingBoyPlayerIdRef = useRef(null);
   const previousPendingEyewitnessPlayerIdRef = useRef(null);
   const previousPendingMediaPlayerIdRef = useRef(null);
   const previousDealResultIdRef = useRef(null);
@@ -446,6 +464,32 @@ function App() {
   }, [gameState.pendingDeal]);
 
   useEffect(() => {
+    const nextPendingBoyPlayerId = gameState.pendingBoy?.boyPlayerId ?? null;
+    const previousPendingBoyPlayerId = previousPendingBoyPlayerIdRef.current;
+
+    if (!nextPendingBoyPlayerId) {
+      setShowPendingBoyModal(false);
+      previousPendingBoyPlayerIdRef.current = null;
+      return;
+    }
+
+    if (previousPendingBoyPlayerId === nextPendingBoyPlayerId) {
+      setShowPendingBoyModal(true);
+      return;
+    }
+
+    previousPendingBoyPlayerIdRef.current = nextPendingBoyPlayerId;
+    setShowPendingBoyModal(false);
+    const timeoutId = window.setTimeout(() => {
+      setShowPendingBoyModal(true);
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [gameState.pendingBoy]);
+
+  useEffect(() => {
     const nextPendingEyewitnessPlayerId =
       gameState.pendingEyewitness?.eyewitnessPlayerId ?? null;
     const previousPendingEyewitnessPlayerId =
@@ -542,6 +586,13 @@ function App() {
   );
 
   const handCount = visibleHand.length;
+  const connectedPlayerCount = Math.max(
+    gameState.players.filter((player) => player.connected !== false).length,
+    1
+  );
+  const maxInitialCardCount = Math.floor(
+    (gameState.totalCardCount ?? 31) / connectedPlayerCount
+  );
   const selfPlayer =
     gameState.players.find((player) => player.id === playerId) ?? null;
   const showReconnectPrompt = Boolean(
@@ -571,6 +622,7 @@ function App() {
     gameState.yourTurn &&
     !gameState.pendingDetectiveGuess &&
     !gameState.pendingDeal &&
+    !gameState.pendingBoy &&
     !gameState.pendingEyewitness &&
     !gameState.pendingMediaManipulation &&
     !gameState.disconnectedNotice &&
@@ -586,6 +638,7 @@ function App() {
     Boolean(selectedCard) &&
     !gameState.pendingDetectiveGuess &&
     !gameState.pendingDeal &&
+    !gameState.pendingBoy &&
     !gameState.pendingEyewitness &&
     !gameState.pendingMediaManipulation &&
     !gameState.disconnectedNotice &&
@@ -617,6 +670,8 @@ function App() {
     status === "Connected" &&
     showReconnectPrompt &&
     nameInput.trim().length > 0;
+  const canOpenOptions =
+    status === "Connected" && gameState.phase !== "playing";
   const didCurrentPlayerWin = Boolean(
     playerId &&
       gameState.winner?.winners?.includes(playerId)
@@ -644,6 +699,49 @@ function App() {
     }
 
     socket.send(JSON.stringify({ type: "set_name", name: nameInput.trim() }));
+  };
+
+  const handleOpenOptions = () => {
+    setOptionsForm({
+      initialCardCount: String(gameState.options?.initialCardCount ?? 4),
+      useRandomSetOfCards: Boolean(gameState.options?.useRandomSetOfCards)
+    });
+    setOptionsError("");
+    setShowOptionsModal(true);
+  };
+
+  const handleSaveOptions = () => {
+    const socket = socketRef.current;
+    const initialCardCount = Number(optionsForm.initialCardCount);
+
+    if (!Number.isInteger(initialCardCount)) {
+      setOptionsError(t("initialCardCountWholeNumber"));
+      return;
+    }
+
+    if (initialCardCount < 4) {
+      setOptionsError(t("initialCardCountTooSmall", { min: 4 }));
+      return;
+    }
+
+    if (initialCardCount > maxInitialCardCount) {
+      setOptionsError(t("initialCardCountTooLarge", { max: maxInitialCardCount }));
+      return;
+    }
+
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    socket.send(
+      JSON.stringify({
+        type: "set_options",
+        initialCardCount,
+        useRandomSetOfCards: optionsForm.useRandomSetOfCards
+      })
+    );
+    setOptionsError("");
+    setShowOptionsModal(false);
   };
 
   const handlePlayCard = () => {
@@ -803,6 +901,22 @@ function App() {
     setNotice("");
   };
 
+  const handleBoyRevealFinish = () => {
+    const socket = socketRef.current;
+
+    if (
+      !socket ||
+      socket.readyState !== WebSocket.OPEN ||
+      !gameState.pendingBoy?.showingReveal ||
+      gameState.pendingBoy.yourRole !== "boy_player"
+    ) {
+      return;
+    }
+
+    socket.send(JSON.stringify({ type: "boy_finish_reveal" }));
+    setNotice("");
+  };
+
   const handleDealTargetChange = (nextTargetPlayerId) => {
     setDealTargetId(nextTargetPlayerId);
 
@@ -896,14 +1010,24 @@ function App() {
               {roomId && <p className="room-code">{t("roomCode", { roomId })}</p>}
             </div>
             {gameState.phase !== "playing" && (
-              <button
-                type="button"
-                className="start-button"
-                onClick={handleStartGame}
-                disabled={!canPressStart}
-              >
-                {t("startGame")}
-              </button>
+              <div className="panel-header-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleOpenOptions}
+                  disabled={!canOpenOptions}
+                >
+                  {t("option")}
+                </button>
+                <button
+                  type="button"
+                  className="start-button"
+                  onClick={handleStartGame}
+                  disabled={!canPressStart}
+                >
+                  {t("startGame")}
+                </button>
+              </div>
             )}
           </div>
 
@@ -1107,6 +1231,65 @@ function App() {
         </div>
       )}
 
+      {showOptionsModal && (
+        <div className="modal-backdrop">
+          <section className="detective-modal">
+            <span className="label">{t("option")}</span>
+            <label className="target-picker">
+              <span className="label">{t("initialCardCount")}</span>
+              <p className="option-help">
+                {t("initialCardCountLimit", { max: maxInitialCardCount })}
+              </p>
+              <input
+                type="number"
+                min="4"
+                max={String(maxInitialCardCount)}
+                value={optionsForm.initialCardCount}
+                onChange={(event) =>
+                  setOptionsForm((current) => ({
+                    ...current,
+                    initialCardCount: event.target.value
+                  }))
+                }
+              />
+            </label>
+            <label className="toggle-row">
+              <span className="label">{t("useRandomSetOfCards")}</span>
+              <input
+                type="checkbox"
+                checked={optionsForm.useRandomSetOfCards}
+                onChange={(event) =>
+                  setOptionsForm((current) => ({
+                    ...current,
+                    useRandomSetOfCards: event.target.checked
+                  }))
+                }
+              />
+            </label>
+            {optionsError && <div className="notice-box modal-notice-box">{optionsError}</div>}
+            <div className="modal-button-row">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setShowOptionsModal(false);
+                  setOptionsError("");
+                }}
+              >
+                {t("cancel")}
+              </button>
+              <button
+                type="button"
+                className="play-button"
+                onClick={handleSaveOptions}
+              >
+                {t("save")}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {gameState.pendingDeal && showPendingDealModal && (
         <div className="modal-backdrop">
           <section className="detective-modal">
@@ -1215,6 +1398,55 @@ function App() {
                   </>
                 )}
               </>
+            )}
+          </section>
+        </div>
+      )}
+
+      {gameState.pendingBoy && showPendingBoyModal && (
+        <div className="modal-backdrop">
+          <section className="detective-modal detective-result-modal">
+            <span className="label">{t("boy")}</span>
+            <img
+              className="modal-card-image"
+              src={boyCard}
+              alt="Boy card"
+            />
+            <strong>
+              {gameState.pendingBoy.yourRole === "boy_player"
+                ? t("boyCheckingCriminal")
+                : t("boyWaitingObserver", {
+                    actorName: gameState.pendingBoy.boyPlayerName
+                  })}
+            </strong>
+            {gameState.pendingBoy.yourRole === "boy_player" ? (
+              <>
+                <div className="boy-reveal-card">
+                  <img
+                    className={`rumor-card-image ${
+                      gameState.pendingBoy.hasCriminal ? "" : "is-grayscale"
+                    }`}
+                    src={criminalCard}
+                    alt="Criminal card"
+                  />
+                </div>
+                <p>
+                  {gameState.pendingBoy.hasCriminal
+                    ? t("boyRevealCriminalHolder", {
+                        playerName: gameState.pendingBoy.criminalPlayerName
+                      })
+                    : t("boyRevealNoCriminal")}
+                </p>
+                <button
+                  type="button"
+                  className="play-button"
+                  onClick={handleBoyRevealFinish}
+                >
+                  {t("close")}
+                </button>
+              </>
+            ) : (
+              <p>{t("boyWaitingOthers")}</p>
             )}
           </section>
         </div>

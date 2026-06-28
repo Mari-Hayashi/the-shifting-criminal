@@ -24,6 +24,17 @@ export const translations = {
       "The Criminal card can only be played when it is your last remaining card.",
     detectiveFirstRoundRule:
       "The Detective card cannot be played during the first round.",
+    option: "Option",
+    save: "Save",
+    cancel: "Cancel",
+    initialCardCount: "Initial Card Count",
+    useRandomSetOfCards: "Use Random Set of Cards",
+    initialCardCountWholeNumber: "Initial card count must be a whole number.",
+    initialCardCountTooSmall: ({ min }) =>
+      `Initial card count must be at least ${min}.`,
+    initialCardCountTooLarge: ({ max }) =>
+      `Initial card count cannot be greater than ${max} for the current player count.`,
+    initialCardCountLimit: ({ max }) => `Use a value from 4 to ${max}.`,
     startGame: "Start Game",
     yourName: "Your Name",
     enterName: "Enter your name",
@@ -58,6 +69,15 @@ export const translations = {
     dealPlayersChoosing: ({ actorName, targetName }) =>
       `${actorName} and ${targetName} are choosing cards to exchange.`,
     confirmExchangeCard: "Confirm Exchange Card",
+    boy: "Boy",
+    boyCheckingCriminal: "You are checking who has the Criminal card.",
+    boyWaitingObserver: ({ actorName }) =>
+      `${actorName} is checking who has the Criminal card.`,
+    boyRevealCriminalHolder: ({ playerName }) =>
+      `${playerName} has the Criminal card.`,
+    boyRevealNoCriminal: "No one has the Criminal card in this game.",
+    boyWaitingOthers: "Please wait while Boy checks who has the Criminal card.",
+    close: "Close",
     eyewitness: "Eyewitness",
     chooseInspectPlayer: "Choose a player whose hand you want to inspect.",
     eyewitnessChoosing: ({ name }) =>
@@ -120,6 +140,17 @@ export const translations = {
       "犯人カードは手札の最後の1枚のときにしか出せません。",
     detectiveFirstRoundRule:
       "探偵カードは二週目になるまでは使えません。",
+    option: "オプション",
+    save: "保存",
+    cancel: "キャンセル",
+    initialCardCount: "最初のカードの枚数",
+    useRandomSetOfCards: "必須カードを無効にする",
+    initialCardCountWholeNumber: "最初のカードの枚数は整数で入力してください。",
+    initialCardCountTooSmall: ({ min }) =>
+      `最初のカードの枚数は ${min} 以上にしてください。`,
+    initialCardCountTooLarge: ({ max }) =>
+      `最初のカードの枚数は現在の人数では ${max} 以下にしてください。`,
+    initialCardCountLimit: ({ max }) => `4 から ${max} の間で入力してください。`,
     startGame: "開始",
     yourName: "プレイヤー名",
     enterName: "名前を入力",
@@ -151,6 +182,15 @@ export const translations = {
     dealPlayersChoosing: ({ actorName, targetName }) =>
       `${actorName} と ${targetName} が交換するカードを選んでいます。`,
     confirmExchangeCard: "決定",
+    boy: "少年",
+    boyCheckingCriminal: "犯人カードを持っている人を確認しています。",
+    boyWaitingObserver: ({ actorName }) =>
+      `${actorName} が犯人カードを持っている人を確認しています。`,
+    boyRevealCriminalHolder: ({ playerName }) =>
+      `${playerName} が犯人カードを持っています。`,
+    boyRevealNoCriminal: "このゲームでは誰も犯人カードを持っていません。",
+    boyWaitingOthers: "少年が犯人カードを持っている人を確認しています。少し待ってください。",
+    close: "閉じる",
     eyewitness: "目撃者",
     chooseInspectPlayer: "誰の手札を見ますか？",
     eyewitnessChoosing: ({ name }) => `${name} が手札を見る人を選んでいます。`,

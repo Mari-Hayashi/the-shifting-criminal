@@ -139,6 +139,12 @@ input {
   margin-bottom: 18px;
 }
 
+.panel-header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
 .players-list,
 .log-entries {
   display: grid;
@@ -159,6 +165,47 @@ input {
 .lobby-actions {
   display: flex;
   align-items: stretch;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.toggle-row .label {
+  margin-bottom: 0;
+  color: #fff473;
+}
+
+.toggle-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+}
+
+.option-help {
+  margin: 0 0 8px;
+  color: #f0ff8e;
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+}
+
+.modal-notice-box {
+  margin-top: 18px;
+}
+
+.modal-button-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.modal-button-row .play-button,
+.modal-button-row .secondary-button {
+  width: 100%;
+  margin-top: 0;
 }
 
 .name-form input {
@@ -531,6 +578,16 @@ input {
   box-shadow: 0 12px 28px rgba(18, 24, 43, 0.24);
 }
 
+.boy-reveal-card {
+  display: grid;
+  justify-items: center;
+  margin-top: 18px;
+}
+
+.is-grayscale {
+  filter: grayscale(1) brightness(0.75);
+}
+
 .result-win {
   background: rgba(216, 247, 208, 0.97);
   border-color: rgba(107, 159, 82, 0.45);
@@ -583,7 +640,19 @@ input {
     align-items: stretch;
   }
 
+  .panel-header-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .name-box {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toggle-row,
+  .modal-button-row {
     flex-direction: column;
     align-items: stretch;
   }
