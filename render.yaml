@@ -3,6 +3,7 @@ services:
     name: shifting-culprit
     runtime: node
     plan: free
+    branch: mhayashi/custom-card-count
     buildCommand: npm install && npm run build
     startCommand: npm start
     autoDeploy: true
