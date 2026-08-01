@@ -16,6 +16,10 @@ import mediaManipulationCard from "./assets/Media_Manipulation.png";
 import rumorCard from "./assets/Rumor.png";
 
 const ROOM_ID_PATTERN = /^[A-Z]{4}$/;
+const GAME_TYPES = {
+  SHIFTING_CULPRIT: "shifting_culprit",
+  MIND_WITH_WORDS: "mind_with_words"
+};
 
 function createRandomRoomId() {
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -107,7 +111,13 @@ function App() {
   const [status, setStatus] = useState("Connecting...");
   const [gameState, setGameState] = useState({
     phase: "lobby",
+    activeGame: null,
+    mindWithWords: null,
     canStart: false,
+    canStartGames: {
+      shifting_culprit: false,
+      mind_with_words: false
+    },
     options: {
       initialCardCount: 4,
       useRandomSetOfCards: false
@@ -161,6 +171,8 @@ function App() {
   const [eyewitnessTargetId, setEyewitnessTargetId] = useState("");
   const [selectedDealCardId, setSelectedDealCardId] = useState("");
   const [selectedMediaCardId, setSelectedMediaCardId] = useState("");
+  const [mindTopicInput, setMindTopicInput] = useState("");
+  const [mindAnswerInput, setMindAnswerInput] = useState("");
   const socketRef = useRef(null);
   const previousPendingActionPlayerIdRef = useRef(null);
   const previousPendingDealPlayerIdRef = useRef(null);
@@ -318,6 +330,19 @@ function App() {
       return;
     }
   }, [gameState.pendingMediaManipulation]);
+
+  useEffect(() => {
+    if (!gameState.mindWithWords) {
+      setMindTopicInput("");
+      setMindAnswerInput("");
+      return;
+    }
+
+    setMindTopicInput((current) => current || gameState.mindWithWords.topic || "");
+    setMindAnswerInput((current) =>
+      current || gameState.mindWithWords.yourAnswer || ""
+    );
+  }, [gameState.mindWithWords]);
 
   useEffect(() => {
     const nextPendingMediaPlayerId =
@@ -610,7 +635,18 @@ function App() {
       !gameState.winner &&
       !gameState.gameError
   );
-  const canPressStart = gameState.canStart && status === "Connected";
+  const canStartCulprit =
+    (gameState.canStartGames?.[GAME_TYPES.SHIFTING_CULPRIT] ?? gameState.canStart) &&
+    status === "Connected";
+  const canStartMind =
+    Boolean(gameState.canStartGames?.[GAME_TYPES.MIND_WITH_WORDS]) &&
+    status === "Connected";
+  const isCulpritPlaying =
+    gameState.phase === "playing" &&
+    gameState.activeGame !== GAME_TYPES.MIND_WITH_WORDS;
+  const isMindPlaying =
+    gameState.phase === "playing" &&
+    gameState.activeGame === GAME_TYPES.MIND_WITH_WORDS;
   const canSaveName =
     status === "Connected" &&
     gameState.phase !== "playing" &&
@@ -677,14 +713,16 @@ function App() {
       gameState.winner?.winners?.includes(playerId)
   );
 
-  const handleStartGame = () => {
+  const handleStartGame = (gameType) => {
     const socket = socketRef.current;
+    const canStart =
+      gameType === GAME_TYPES.MIND_WITH_WORDS ? canStartMind : canStartCulprit;
 
-    if (!socket || socket.readyState !== WebSocket.OPEN || !canPressStart) {
+    if (!socket || socket.readyState !== WebSocket.OPEN || !canStart) {
       return;
     }
 
-    socket.send(JSON.stringify({ type: "start_game" }));
+    socket.send(JSON.stringify({ type: "start_game", gameType }));
   };
 
   const handleSaveName = () => {
@@ -819,6 +857,43 @@ function App() {
     setSelectedDealCardId("");
     setSelectedMediaCardId("");
     setNotice("");
+  };
+
+  const sendMindAction = (payload) => {
+    const socket = socketRef.current;
+
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    socket.send(JSON.stringify(payload));
+    setNotice("");
+  };
+
+  const handleMindTopicSubmit = () => {
+    const topic = mindTopicInput.trim();
+
+    if (topic.length < 3) {
+      setNotice(t("mindTopicRequired"));
+      return;
+    }
+
+    sendMindAction({ type: "mind_set_topic", topic });
+  };
+
+  const handleMindAnswerSubmit = () => {
+    const answer = mindAnswerInput.trim();
+
+    if (!answer) {
+      setNotice(t("mindAnswerRequired"));
+      return;
+    }
+
+    sendMindAction({ type: "mind_submit_answer", answer });
+  };
+
+  const handleMindReveal = () => {
+    sendMindAction({ type: "mind_reveal_card" });
   };
 
   const handleDealTargetSelection = () => {
@@ -992,9 +1067,21 @@ function App() {
         >
           {t("languageLabel")}
         </button>
-        <p className="eyebrow">{t("eyebrow")}</p>
-        <h1>{t("title")}</h1>
-        <p className="subcopy">{t("subcopy")}</p>
+        <p className="eyebrow">{gameState.phase === "lobby" ? t("gameLobby") : t("eyebrow")}</p>
+        <h1>
+          {isMindPlaying
+            ? t("mindWithWordsTitle")
+            : gameState.phase === "lobby"
+              ? t("chooseGameTitle")
+              : t("title")}
+        </h1>
+        <p className="subcopy">
+          {isMindPlaying
+            ? t("mindWithWordsSubcopy")
+            : gameState.phase === "lobby"
+              ? t("chooseGameSubcopy")
+              : t("subcopy")}
+        </p>
       </section>
 
       <section
@@ -1009,27 +1096,50 @@ function App() {
               <strong>{t("connected", { count: gameState.players.length })}</strong>
               {roomId && <p className="room-code">{t("roomCode", { roomId })}</p>}
             </div>
-            {gameState.phase !== "playing" && (
-              <div className="panel-header-actions">
+          </div>
+
+          {gameState.phase !== "playing" && (
+            <div className="game-picker" aria-label={t("chooseGameTitle")}>
+              <article className="game-choice game-choice-culprit">
                 <button
                   type="button"
-                  className="secondary-button"
+                  className="secondary-button game-option-button"
                   onClick={handleOpenOptions}
                   disabled={!canOpenOptions}
                 >
                   {t("option")}
                 </button>
+                <div>
+                  <span className="label">{t("deductionGame")}</span>
+                  <h2>{t("title")}</h2>
+                  <p>{t("culpritLobbyDescription")}</p>
+                </div>
                 <button
                   type="button"
                   className="start-button"
-                  onClick={handleStartGame}
-                  disabled={!canPressStart}
+                  onClick={() => handleStartGame(GAME_TYPES.SHIFTING_CULPRIT)}
+                  disabled={!canStartCulprit}
                 >
-                  {t("startGame")}
+                  {t("startCulprit")}
                 </button>
-              </div>
-            )}
-          </div>
+              </article>
+              <article className="game-choice game-choice-mind">
+                <div>
+                  <span className="label">{t("wordGame")}</span>
+                  <h2>{t("mindWithWordsTitle")}</h2>
+                  <p>{t("mindLobbyDescription")}</p>
+                </div>
+                <button
+                  type="button"
+                  className="start-button mind-start-button"
+                  onClick={() => handleStartGame(GAME_TYPES.MIND_WITH_WORDS)}
+                  disabled={!canStartMind}
+                >
+                  {t("startMind")}
+                </button>
+              </article>
+            </div>
+          )}
 
           {gameState.phase !== "playing" && (
             <div className="name-box">
@@ -1076,7 +1186,7 @@ function App() {
                   {player.connected === false && <p>{t("disconnected")}</p>}
                   {player.isIntrigue && <p className="player-role-tag">{t("intrigue")}</p>}
                 </div>
-                {!player.spectator && (
+                {!player.spectator && isCulpritPlaying && (
                   <CardBackStack count={player.handCount} />
                 )}
               </div>
@@ -1087,7 +1197,7 @@ function App() {
         </article>
 
         <div className="center-column">
-          {gameState.phase === "playing" && (
+          {isCulpritPlaying && (
             <>
               <article className="panel center-panel">
                 <div className="panel-header">
@@ -1173,6 +1283,176 @@ function App() {
                 </button>
               </article>
             </>
+          )}
+          {isMindPlaying && (
+            <article className="panel mind-game-panel">
+              <span className="label">{t("nowPlaying")}</span>
+              <h2>{t("mindWithWordsTitle")}</h2>
+              {gameState.mindWithWords?.stage === "topic" && (
+                <div className="mind-stage">
+                  <p>{t("mindChooseTopicHelp")}</p>
+                  <label className="mind-field">
+                    <span className="label">{t("mindTopic")}</span>
+                    <input
+                      type="text"
+                      maxLength={120}
+                      value={mindTopicInput}
+                      onChange={(event) => setMindTopicInput(event.target.value)}
+                      placeholder={t("mindTopicPlaceholder")}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="play-button"
+                    onClick={handleMindTopicSubmit}
+                    disabled={mindTopicInput.trim().length < 3}
+                  >
+                    {t("mindConfirmTopic")}
+                  </button>
+                </div>
+              )}
+
+              {gameState.mindWithWords?.stage === "answers" && (
+                <div className="mind-stage">
+                  <div className="mind-topic-banner">
+                    <span className="label">{t("mindTopic")}</span>
+                    <strong>{gameState.mindWithWords.topic}</strong>
+                  </div>
+                  <div className="mind-number-card" aria-label={t("mindYourNumber")}>
+                    <span>{t("mindYourNumber")}</span>
+                    <strong>{gameState.mindWithWords.yourNumber}</strong>
+                  </div>
+                  {gameState.mindWithWords.yourAnswerSubmitted ? (
+                    <div className="mind-waiting">
+                      <strong>{t("mindAnswerLocked")}</strong>
+                      <p>{gameState.mindWithWords.yourAnswer}</p>
+                      <span>{t("mindWaitingAnswers")}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <p>{t("mindAnswerHelp")}</p>
+                      <label className="mind-field">
+                        <span className="label">{t("mindYourAnswer")}</span>
+                        <input
+                          type="text"
+                          maxLength={120}
+                          value={mindAnswerInput}
+                          onChange={(event) => setMindAnswerInput(event.target.value)}
+                          placeholder={t("mindAnswerPlaceholder")}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="play-button"
+                        onClick={handleMindAnswerSubmit}
+                        disabled={!mindAnswerInput.trim()}
+                      >
+                        {t("mindLockAnswer")}
+                      </button>
+                    </>
+                  )}
+                  <div className="mind-progress">
+                    {gameState.mindWithWords.players.map((player) => (
+                      <span key={player.id} className={player.answerSubmitted ? "is-done" : ""}>
+                        {player.name} {player.answerSubmitted ? "✓" : "…"}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mind-answer-list">
+                    {gameState.mindWithWords.players
+                      .filter((player) => player.answerSubmitted)
+                      .map((player) => (
+                        <div key={player.id} className="mind-answer-row">
+                          <div>
+                            <span className="label">{player.name}</span>
+                            <strong>{player.answer}</strong>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {["discussion", "success", "failed"].includes(
+                gameState.mindWithWords?.stage
+              ) && (
+                <div className="mind-stage">
+                  <div className="mind-topic-banner">
+                    <span className="label">{t("mindTopic")}</span>
+                    <strong>{gameState.mindWithWords.topic}</strong>
+                  </div>
+                  {gameState.mindWithWords.stage === "discussion" && (
+                    <>
+                      <p>{t("mindDiscussHelp")}</p>
+                      {gameState.mindWithWords.hadMistake && (
+                        <div className="mind-result is-warning">
+                          <strong>{t("mindContinueTitle")}</strong>
+                          <span>{t("mindContinueCopy")}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {gameState.mindWithWords.stage === "success" && (
+                    <div className="mind-result is-success">
+                      <strong>{t("mindSuccessTitle")}</strong>
+                      <span>{t("mindSuccessCopy")}</span>
+                    </div>
+                  )}
+                  {gameState.mindWithWords.stage === "failed" && (
+                    <div className="mind-result is-failed">
+                      <strong>{t("mindFailedTitle")}</strong>
+                      <span>{t("mindFailedCopy")}</span>
+                    </div>
+                  )}
+                  <div className="mind-answer-list">
+                    {(
+                      ["success", "failed"].includes(gameState.mindWithWords.stage)
+                        ? [...gameState.mindWithWords.players].sort(
+                            (leftPlayer, rightPlayer) =>
+                              leftPlayer.revealedNumber - rightPlayer.revealedNumber
+                          )
+                        : gameState.mindWithWords.players
+                    ).map((player) => (
+                      <div key={player.id} className="mind-answer-row">
+                        <div>
+                          <span className="label">{player.name}</span>
+                          <strong>{player.answer}</strong>
+                        </div>
+                        {player.revealedNumber !== null && (
+                          <span
+                            className={`mind-revealed-number ${
+                              player.revealCorrect === true
+                                ? "is-correct"
+                                : player.revealCorrect === false
+                                  ? "is-wrong"
+                                  : ""
+                            }`}
+                          >
+                            {player.revealedNumber}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {gameState.mindWithWords.stage === "discussion" &&
+                    !gameState.mindWithWords.players.find(
+                      (player) => player.id === playerId
+                    )?.revealedNumber && (
+                      <div className="mind-reveal-action">
+                        <span>{t("mindYourSecretNumber", { number: gameState.mindWithWords.yourNumber })}</span>
+                        <button type="button" className="play-button" onClick={handleMindReveal}>
+                          {t("mindRevealCard")}
+                        </button>
+                      </div>
+                    )}
+                </div>
+              )}
+              {["success", "failed"].includes(gameState.mindWithWords?.stage) && (
+                <button type="button" className="secondary-button" onClick={handleReturnToLobby}>
+                  {t("backToLobby")}
+                </button>
+              )}
+            </article>
           )}
         </div>
       </section>

@@ -167,6 +167,249 @@ input {
   align-items: stretch;
 }
 
+.game-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.game-choice {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 20px;
+  min-height: 270px;
+  padding: 24px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 248, 220, 0.42);
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(48, 55, 76, 0.9), rgba(76, 88, 132, 0.78));
+}
+
+.game-choice-mind {
+  background: linear-gradient(145deg, rgba(31, 76, 88, 0.94), rgba(71, 130, 126, 0.82));
+}
+
+.game-choice h2,
+.mind-game-panel h2 {
+  position: relative;
+  margin: 6px 0 10px;
+  font-size: clamp(1.55rem, 3vw, 2.3rem);
+  line-height: 1;
+}
+
+.game-choice p,
+.mind-game-panel p {
+  position: relative;
+  margin: 0;
+  color: rgba(240, 244, 255, 0.88);
+  line-height: 1.55;
+}
+
+.game-choice .start-button {
+  position: relative;
+  width: 100%;
+}
+
+.game-option-button {
+  position: absolute;
+  z-index: 2;
+  top: 18px;
+  right: 18px;
+  padding: 9px 15px;
+  background: rgba(228, 233, 247, 0.96);
+  color: #2f3750;
+  box-shadow: 0 8px 18px rgba(18, 24, 43, 0.22);
+}
+
+.game-choice-culprit > div {
+  padding-right: 76px;
+}
+
+.mind-start-button {
+  background: linear-gradient(135deg, #71c8b9, #276a6c);
+}
+
+.mind-game-panel {
+  min-height: 360px;
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
+.mind-player-count {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: #f0ff8e;
+}
+
+.mind-player-count strong {
+  font-size: 2.6rem;
+}
+
+.mind-stage {
+  display: grid;
+  gap: 18px;
+}
+
+.mind-field {
+  display: grid;
+  gap: 8px;
+}
+
+.mind-field input {
+  width: 100%;
+  border: 1px solid rgba(188, 196, 226, 0.22);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: rgba(228, 233, 247, 0.96);
+  color: #2f3750;
+}
+
+.mind-topic-banner {
+  display: grid;
+  gap: 4px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(31, 76, 88, 0.72);
+}
+
+.mind-topic-banner .label {
+  margin: 0;
+  color: #a7e9da;
+}
+
+.mind-number-card {
+  width: min(220px, 100%);
+  margin: 0 auto;
+  padding: 22px;
+  border: 2px solid rgba(240, 255, 142, 0.7);
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(31, 76, 88, 0.96), rgba(71, 130, 126, 0.9));
+  text-align: center;
+  box-shadow: 0 18px 44px rgba(18, 24, 43, 0.28);
+}
+
+.mind-number-card span {
+  display: block;
+  color: #dce9e5;
+  font-size: 0.85rem;
+}
+
+.mind-number-card strong {
+  display: block;
+  margin-top: 4px;
+  color: #f0ff8e;
+  font-size: 4.5rem;
+  line-height: 1;
+}
+
+.mind-waiting {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(48, 55, 76, 0.72);
+  text-align: center;
+}
+
+.mind-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mind-progress span {
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: rgba(48, 55, 76, 0.72);
+  color: rgba(232, 236, 252, 0.7);
+  font-size: 0.82rem;
+}
+
+.mind-progress span.is-done {
+  background: rgba(39, 106, 108, 0.9);
+  color: #fff;
+}
+
+.mind-answer-list {
+  display: grid;
+  gap: 10px;
+}
+
+.mind-answer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(48, 55, 76, 0.72);
+}
+
+.mind-answer-row .label {
+  margin-bottom: 5px;
+  color: #a7e9da;
+}
+
+.mind-revealed-number {
+  display: grid;
+  flex: 0 0 54px;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border-radius: 16px;
+  background: #f0ff8e;
+  color: #2f3750;
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+
+.mind-revealed-number.is-correct {
+  background: #72d39a;
+  color: #173c2a;
+}
+
+.mind-revealed-number.is-wrong {
+  background: #f08080;
+  color: #511f29;
+}
+
+.mind-reveal-action {
+  display: grid;
+  gap: 4px;
+  padding-top: 6px;
+  text-align: center;
+}
+
+.mind-result {
+  display: grid;
+  gap: 5px;
+  padding: 18px;
+  border-radius: 18px;
+  text-align: center;
+}
+
+.mind-result strong {
+  font-size: 1.5rem;
+}
+
+.mind-result.is-success {
+  background: rgba(39, 106, 108, 0.92);
+  color: #f0ff8e;
+}
+
+.mind-result.is-failed {
+  background: rgba(130, 55, 65, 0.9);
+}
+
+.mind-result.is-warning {
+  background: rgba(143, 105, 41, 0.9);
+  color: #fff4c4;
+}
+
 .toggle-row {
   display: flex;
   align-items: center;
@@ -623,6 +866,10 @@ input {
 }
 
 @media (max-width: 640px) {
+  .game-picker {
+    grid-template-columns: 1fr;
+  }
+
   .page-shell {
     padding: 24px 14px 40px;
   }

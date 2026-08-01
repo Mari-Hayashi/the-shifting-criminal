@@ -1,5 +1,49 @@
 export const translations = {
   en: {
+    gameLobby: "Multiplayer Game Lobby",
+    chooseGameTitle: "Choose Your Game",
+    chooseGameSubcopy:
+      "Gather your group, share the room code, and choose what you want to play together.",
+    deductionGame: "Deduction Card Game",
+    wordGame: "Cooperative Word Game",
+    culpritLobbyDescription:
+      "Unmask the culprit—or keep the truth shifting until your final card.",
+    mindWithWordsTitle: "The Mind with Words",
+    mindWithWordsSubcopy:
+      "Tune in to the group, trust your instincts, and find the same wavelength without overthinking it.",
+    mindLobbyDescription:
+      "A lighter cooperative word game about intuition, timing, and thinking together.",
+    startCulprit: "Start The Shifting Culprit",
+    startMind: "Start The Mind with Words",
+    nowPlaying: "Now Playing",
+    mindGameReady: "The table is ready. Follow the word prompts from your game host.",
+    playersReady: "players ready",
+    mindTopic: "Topic",
+    mindChooseTopicHelp:
+      "Decide on a scale together, then enter it here. Any player can confirm the group's choice.",
+    mindTopicPlaceholder: "e.g. Popular ice cream flavors",
+    mindConfirmTopic: "Confirm Topic & Deal Cards",
+    mindTopicRequired: "Enter a topic with at least 3 characters.",
+    mindYourNumber: "Your secret number",
+    mindAnswerHelp:
+      "Give an example that fits your number on this topic's scale. Do not say or hint at the number itself.",
+    mindYourAnswer: "Your answer",
+    mindAnswerPlaceholder: "Enter the example you'll share",
+    mindLockAnswer: "Lock In Answer",
+    mindAnswerRequired: "Enter an answer before continuing.",
+    mindAnswerLocked: "Your answer is locked in",
+    mindWaitingAnswers: "Waiting for everyone else to answer…",
+    mindDiscussHelp:
+      "Discuss the answers without revealing numbers. When you believe yours is the lowest remaining card, reveal it.",
+    mindYourSecretNumber: ({ number }) => `Your card is ${number}`,
+    mindRevealCard: "I Think I'm Lowest — Reveal Card",
+    mindSuccessTitle: "Perfect wavelength!",
+    mindSuccessCopy: "Every card was revealed in ascending order.",
+    mindFailedTitle: "Out of order",
+    mindFailedCopy: "A card was revealed before a lower number. All cards are now shown.",
+    mindContinueTitle: "Keep going",
+    mindContinueCopy:
+      "A card was played out of order, so only the lower cards were revealed. Discuss again and continue with the hidden higher cards.",
     languageLabel: "日本語",
     eyebrow: "Deduction Card Game Prototype",
     title: "The Shifting Culprit",
@@ -116,6 +160,51 @@ export const translations = {
     backToLobby: "Back to Lobby"
   },
   ja: {
+    gameLobby: "マルチプレイヤーゲームロビー",
+    chooseGameTitle: "ゲームを選ぶ",
+    chooseGameSubcopy:
+      "みんなで集まり、ルームコードを共有して、一緒に遊ぶゲームを選びましょう。",
+    deductionGame: "推理カードゲーム",
+    wordGame: "協力型ワードゲーム",
+    culpritLobbyDescription:
+      "犯人を見破るか、最後の1枚まで真相を揺さぶり続けましょう。",
+    mindWithWordsTitle: "いと",
+    mindWithWordsSubcopy:
+      "みんなの感覚に耳を澄ませ、直感を信じ、考えすぎずに心を合わせましょう。",
+    mindLobbyDescription:
+      "直感とタイミング、そしてみんなで心を合わせることを楽しむ協力型ワードゲームです。",
+    startCulprit: "『犯人は踊る』を開始",
+    startMind: "『いと』を開始",
+    nowPlaying: "プレイ中",
+    mindGameReady: "準備ができました。ゲームの進行に沿って言葉を選びましょう。",
+    playersReady: "人が準備完了",
+    mindTopic: "お題",
+    mindChooseTopicHelp:
+      "全員で基準となるお題を決め、ここに入力してください。誰でもお題を入力できます。",
+    mindTopicPlaceholder: "例：人気のアイスクリームの味",
+    mindConfirmTopic: "お題を確定してカードを配る",
+    mindTopicRequired: "お題を入力してください。",
+    mindYourNumber: "あなたの数字",
+    mindAnswerHelp:
+      "お題の基準に沿って、自分の数字に合う例を答えてください。数字そのものを言ったり、数字をほのめかしたりしてはいけません。",
+    mindYourAnswer: "あなたの答え",
+    mindAnswerPlaceholder: "答えを入力",
+    mindLockAnswer: "答えを確定",
+    mindAnswerRequired: "答えを入力してください。",
+    mindAnswerLocked: "答えを確定しました",
+    mindWaitingAnswers: "ほかのプレイヤーの回答を待っています…",
+    mindDiscussHelp:
+      "数字を明かさずに回答について話し合いましょう。自分のカードが残りの中で最も小さいと思ったら、カードを公開してください。",
+    mindYourSecretNumber: ({ number }) => `あなたのカードは ${number} です`,
+    mindRevealCard: "カードを出す",
+    mindSuccessTitle: "心がぴったり合いました！",
+    mindSuccessCopy: "すべてのカードを小さい順に公開できました。",
+    mindFailedTitle: "順番が違いました",
+    mindFailedCopy:
+      "より小さい数字より先にカードが公開されました。",
+    mindContinueTitle: "順番が違いました",
+    mindContinueCopy:
+      "カードが順番どおりに出されなかったため、それより小さいカードが公開されました。もう一度話し合い、まだ出されていないカードを公開しましょう。",
     languageLabel: "English",
     eyebrow: "犯人は今日、この場所に集まった私たちの中にいます。",
     title: "犯人は踊る",
