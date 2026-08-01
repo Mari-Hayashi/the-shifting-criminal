@@ -3,6 +3,15 @@ import { existsSync, readFileSync } from "fs";
 import { createServer } from "http";
 import { join } from "path";
 import { WebSocketServer } from "ws";
+import {
+  GAME_TYPE as MIND_WITH_WORDS_GAME_TYPE,
+  MINIMUM_PLAYERS as MIND_WITH_WORDS_MINIMUM_PLAYERS,
+  canReturnToLobby as canReturnFromMindWithWords,
+  getClientState as getMindWithWordsClientState,
+  handleSocketMessage as handleMindWithWordsSocketMessage,
+  initializeGame as initializeMindWithWords,
+  resetGame as resetMindWithWords
+} from "./games/the-mind-with-words/game.js";
 
 const PORT = process.env.PORT || 3001;
 const MIN_PLAYERS = 3;
@@ -12,7 +21,7 @@ const RECONNECT_GRACE_PERIOD_MS = 3 * 60 * 1000;
 const ROOM_ID_PATTERN = /^[A-Z]{4}$/;
 const GAME_TYPES = {
   SHIFTING_CULPRIT: "shifting_culprit",
-  MIND_WITH_WORDS: "mind_with_words"
+  MIND_WITH_WORDS: MIND_WITH_WORDS_GAME_TYPE
 };
 const CARD_TYPES = {
   CRIMINAL: "Criminal",
@@ -208,7 +217,9 @@ function canStartGame(room, gameType = GAME_TYPES.SHIFTING_CULPRIT) {
   }
 
   const minimumPlayers =
-    gameType === GAME_TYPES.MIND_WITH_WORDS ? 2 : MIN_PLAYERS;
+    gameType === GAME_TYPES.MIND_WITH_WORDS
+      ? MIND_WITH_WORDS_MINIMUM_PLAYERS
+      : MIN_PLAYERS;
   const optionsError = validateRoomOptions(room, room.options);
 
   return (
@@ -442,42 +453,11 @@ function broadcastState(room) {
         options: room.options,
         yourName: self?.name ?? "",
         yourHand: self?.hand ?? [],
-        mindWithWords: room.mindWithWords
-          ? {
-              stage: room.mindWithWords.stage,
-              topic: room.mindWithWords.topic,
-              hadMistake: room.mindWithWords.hadMistake,
-              yourNumber:
-                room.mindWithWords.cardsByPlayerId[session.playerId] ?? null,
-              yourAnswer:
-                room.mindWithWords.answersByPlayerId[session.playerId] ?? "",
-              yourAnswerSubmitted: Boolean(
-                room.mindWithWords.answersByPlayerId[session.playerId]
-              ),
-              revealedCards: room.mindWithWords.revealedCards,
-              players: getOrderedPlayers(room)
-                .filter((player) => !player.spectator)
-                .map((player) => ({
-                  id: player.id,
-                  name: player.name,
-                  answerSubmitted: Boolean(
-                    room.mindWithWords.answersByPlayerId[player.id]
-                  ),
-                  answer: room.mindWithWords.answersByPlayerId[player.id] ?? "",
-                  revealedNumber:
-                    room.mindWithWords.revealedCards.find(
-                      (entry) => entry.playerId === player.id
-                    )?.number ??
-                    (["success", "failed"].includes(room.mindWithWords.stage)
-                      ? room.mindWithWords.cardsByPlayerId[player.id]
-                      : null),
-                  revealCorrect:
-                    room.mindWithWords.revealedCards.find(
-                      (entry) => entry.playerId === player.id
-                    )?.correct ?? null
-                }))
-            }
-          : null,
+        mindWithWords: getMindWithWordsClientState(
+          room,
+          session.playerId,
+          getOrderedPlayers(room)
+        ),
         discardPile: room.discardPile,
         logEntries: room.logEntries,
         winner: room.winner,
@@ -917,162 +897,6 @@ function initializeGame(room) {
   );
 }
 
-function initializeMindWithWords(room) {
-  const activePlayers = getConnectedPlayers(room);
-
-  room.phase = "playing";
-  room.activeGame = GAME_TYPES.MIND_WITH_WORDS;
-  room.currentPlayerId = null;
-  room.turnOrder = shuffle(activePlayers.map((player) => player.id));
-  room.discardPile = [];
-  room.logEntries = [];
-  room.winner = null;
-  room.gameError = null;
-  room.mindWithWords = {
-    stage: "topic",
-    topic: "",
-    cardsByPlayerId: {},
-    answersByPlayerId: {},
-    revealedCards: [],
-    hadMistake: false
-  };
-  clearTransientStateOnFinish(room);
-
-  for (const player of room.players.values()) {
-    player.spectator = !player.connected;
-    player.hand = [];
-    player.openingHandTypes = [];
-  }
-
-  addLogEntry(room, `The Mind with Words started with ${activePlayers.length} players.`);
-}
-
-function handleMindTopic(room, socket, playerId, payload) {
-  const game = room.mindWithWords;
-
-  if (room.activeGame !== GAME_TYPES.MIND_WITH_WORDS || game?.stage !== "topic") {
-    sendError(socket, "The topic cannot be changed right now.");
-    return;
-  }
-
-  const topic = String(payload.topic ?? "").trim().replace(/\s+/g, " ");
-
-  if (topic.length < 3 || topic.length > 120) {
-    sendError(socket, "Choose a topic between 3 and 120 characters.");
-    return;
-  }
-
-  const numbers = shuffle(Array.from({ length: 100 }, (_, index) => index + 1));
-  const playerIds = room.turnOrder.filter((id) => !room.players.get(id)?.spectator);
-
-  game.topic = topic;
-  game.cardsByPlayerId = Object.fromEntries(
-    playerIds.map((id, index) => [id, numbers[index]])
-  );
-  game.stage = "answers";
-  addLogEntry(room, `${getDisplayName(room, playerId)} set the topic: ${topic}`);
-  broadcastState(room);
-}
-
-function handleMindAnswer(room, socket, playerId, payload) {
-  const game = room.mindWithWords;
-
-  if (room.activeGame !== GAME_TYPES.MIND_WITH_WORDS || game?.stage !== "answers") {
-    sendError(socket, "Answers cannot be submitted right now.");
-    return;
-  }
-
-  if (!(playerId in game.cardsByPlayerId)) {
-    sendError(socket, "You are not playing in this round.");
-    return;
-  }
-
-  const answer = String(payload.answer ?? "").trim().replace(/\s+/g, " ");
-
-  if (answer.length < 1 || answer.length > 120) {
-    sendError(socket, "Enter an answer up to 120 characters.");
-    return;
-  }
-
-  game.answersByPlayerId[playerId] = answer;
-  const playerIds = Object.keys(game.cardsByPlayerId);
-
-  if (playerIds.every((id) => Boolean(game.answersByPlayerId[id]))) {
-    game.stage = "discussion";
-    addLogEntry(room, "Everyone has answered. Discuss the answers and reveal the lowest card first.");
-  }
-
-  broadcastState(room);
-}
-
-function handleMindReveal(room, socket, playerId) {
-  const game = room.mindWithWords;
-
-  if (room.activeGame !== GAME_TYPES.MIND_WITH_WORDS || game?.stage !== "discussion") {
-    sendError(socket, "Cards cannot be revealed right now.");
-    return;
-  }
-
-  if (game.revealedCards.some((entry) => entry.playerId === playerId)) {
-    sendError(socket, "You already revealed your card.");
-    return;
-  }
-
-  const remainingPlayerIds = Object.keys(game.cardsByPlayerId).filter(
-    (id) => !game.revealedCards.some((entry) => entry.playerId === id)
-  );
-  const number = game.cardsByPlayerId[playerId];
-  const lowerPlayerIds = remainingPlayerIds
-    .filter(
-      (id) => id !== playerId && game.cardsByPlayerId[id] < number
-    )
-    .sort(
-      (leftId, rightId) =>
-        game.cardsByPlayerId[leftId] - game.cardsByPlayerId[rightId]
-    );
-
-  if (lowerPlayerIds.length > 0) {
-    game.hadMistake = true;
-
-    for (const lowerPlayerId of lowerPlayerIds) {
-      game.revealedCards.push({
-        playerId: lowerPlayerId,
-        name: getDisplayName(room, lowerPlayerId),
-        number: game.cardsByPlayerId[lowerPlayerId],
-        autoRevealed: true,
-        correct: false
-      });
-    }
-
-    addLogEntry(
-      room,
-      `${getDisplayName(room, playerId)} revealed ${number} out of order. ${lowerPlayerIds.length} lower card${lowerPlayerIds.length === 1 ? " was" : "s were"} revealed.`
-    );
-  }
-
-  game.revealedCards.push({
-    playerId,
-    name: getDisplayName(room, playerId),
-    number,
-    autoRevealed: false,
-    correct: lowerPlayerIds.length === 0
-  });
-
-  if (
-    game.revealedCards.length === Object.keys(game.cardsByPlayerId).length
-  ) {
-    game.stage = game.hadMistake ? "failed" : "success";
-    addLogEntry(
-      room,
-      game.hadMistake
-        ? "All remaining cards have been revealed."
-        : "Every card was revealed in ascending order."
-    );
-  }
-
-  broadcastState(room);
-}
-
 function resetToLobby(room) {
   clearTransientStateOnFinish(room);
   room.phase = "lobby";
@@ -1087,7 +911,7 @@ function resetToLobby(room) {
   room.turnsTakenInRound = 0;
   room.intriguePlayerIds = [];
   room.roundHasCriminalCard = true;
-  room.mindWithWords = null;
+  resetMindWithWords(room);
 
   for (const [id, player] of room.players.entries()) {
     if (!player.connected) {
@@ -2357,13 +2181,21 @@ wss.on("connection", (socket) => {
             return;
           }
 
-          const minimumPlayers = gameType === GAME_TYPES.MIND_WITH_WORDS ? 2 : MIN_PLAYERS;
+          const minimumPlayers =
+            gameType === GAME_TYPES.MIND_WITH_WORDS
+              ? MIND_WITH_WORDS_MINIMUM_PLAYERS
+              : MIN_PLAYERS;
           sendError(socket, `You need at least ${minimumPlayers} players and no active round to start this game.`);
           return;
         }
 
         if (gameType === GAME_TYPES.MIND_WITH_WORDS) {
-          initializeMindWithWords(room);
+          initializeMindWithWords(room, {
+            getConnectedPlayers,
+            shuffle,
+            clearTransientStateOnFinish,
+            addLogEntry
+          });
         } else {
           initializeGame(room);
         }
@@ -2436,29 +2268,28 @@ wss.on("connection", (socket) => {
         return;
       }
 
-      if (message.type === "mind_set_topic") {
-        handleMindTopic(room, socket, activePlayerId, message);
-        return;
-      }
-
-      if (message.type === "mind_submit_answer") {
-        handleMindAnswer(room, socket, activePlayerId, message);
-        return;
-      }
-
-      if (message.type === "mind_reveal_card") {
-        handleMindReveal(room, socket, activePlayerId);
+      if (
+        handleMindWithWordsSocketMessage({
+          room,
+          socket,
+          playerId: activePlayerId,
+          message,
+          helpers: {
+            sendError,
+            shuffle,
+            addLogEntry,
+            broadcastState,
+            getDisplayName
+          }
+        })
+      ) {
         return;
       }
 
       if (message.type === "return_to_lobby") {
         if (
           room.phase !== "finished" &&
-          !(
-            room.phase === "playing" &&
-            room.activeGame === GAME_TYPES.MIND_WITH_WORDS &&
-            ["success", "failed"].includes(room.mindWithWords?.stage)
-          )
+          !canReturnFromMindWithWords(room)
         ) {
           sendError(socket, "You can only return to the lobby after the game ends.");
           return;
