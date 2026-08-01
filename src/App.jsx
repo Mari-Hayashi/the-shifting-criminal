@@ -14,8 +14,13 @@ import { translate } from "./i18n/translations";
 import manCard from "./assets/Man.png";
 import mediaManipulationCard from "./assets/Media_Manipulation.png";
 import rumorCard from "./assets/Rumor.png";
+import MindWithWordsGame from "./games/the-mind-with-words/Game";
 
 const ROOM_ID_PATTERN = /^[A-Z]{4}$/;
+const GAME_TYPES = {
+  SHIFTING_CULPRIT: "shifting_culprit",
+  MIND_WITH_WORDS: "mind_with_words"
+};
 
 function createRandomRoomId() {
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -107,7 +112,12 @@ function App() {
   const [status, setStatus] = useState("Connecting...");
   const [gameState, setGameState] = useState({
     phase: "lobby",
-    canStart: false,
+    activeGame: null,
+    mindWithWords: null,
+    canStartGames: {
+      shifting_culprit: false,
+      mind_with_words: false
+    },
     options: {
       initialCardCount: 4,
       useRandomSetOfCards: false
@@ -610,7 +620,18 @@ function App() {
       !gameState.winner &&
       !gameState.gameError
   );
-  const canPressStart = gameState.canStart && status === "Connected";
+  const canStartCulprit =
+    Boolean(gameState.canStartGames?.[GAME_TYPES.SHIFTING_CULPRIT]) &&
+    status === "Connected";
+  const canStartMind =
+    Boolean(gameState.canStartGames?.[GAME_TYPES.MIND_WITH_WORDS]) &&
+    status === "Connected";
+  const isCulpritPlaying =
+    gameState.phase === "playing" &&
+    gameState.activeGame !== GAME_TYPES.MIND_WITH_WORDS;
+  const isMindPlaying =
+    gameState.phase === "playing" &&
+    gameState.activeGame === GAME_TYPES.MIND_WITH_WORDS;
   const canSaveName =
     status === "Connected" &&
     gameState.phase !== "playing" &&
@@ -677,14 +698,16 @@ function App() {
       gameState.winner?.winners?.includes(playerId)
   );
 
-  const handleStartGame = () => {
+  const handleStartGame = (gameType) => {
     const socket = socketRef.current;
+    const canStart =
+      gameType === GAME_TYPES.MIND_WITH_WORDS ? canStartMind : canStartCulprit;
 
-    if (!socket || socket.readyState !== WebSocket.OPEN || !canPressStart) {
+    if (!socket || socket.readyState !== WebSocket.OPEN || !canStart) {
       return;
     }
 
-    socket.send(JSON.stringify({ type: "start_game" }));
+    socket.send(JSON.stringify({ type: "start_game", gameType }));
   };
 
   const handleSaveName = () => {
@@ -992,9 +1015,27 @@ function App() {
         >
           {t("languageLabel")}
         </button>
-        <p className="eyebrow">{t("eyebrow")}</p>
-        <h1>{t("title")}</h1>
-        <p className="subcopy">{t("subcopy")}</p>
+        <p className="eyebrow">
+          {gameState.phase === "lobby"
+            ? t("gameLobby")
+            : isMindPlaying
+              ? t("mindEyebrow")
+              : t("eyebrow")}
+        </p>
+        <h1>
+          {isMindPlaying
+            ? t("mindWithWordsTitle")
+            : gameState.phase === "lobby"
+              ? t("chooseGameTitle")
+              : t("title")}
+        </h1>
+        <p className="subcopy">
+          {isMindPlaying
+            ? t("mindWithWordsSubcopy")
+            : gameState.phase === "lobby"
+              ? t("chooseGameSubcopy")
+              : t("subcopy")}
+        </p>
       </section>
 
       <section
@@ -1009,27 +1050,50 @@ function App() {
               <strong>{t("connected", { count: gameState.players.length })}</strong>
               {roomId && <p className="room-code">{t("roomCode", { roomId })}</p>}
             </div>
-            {gameState.phase !== "playing" && (
-              <div className="panel-header-actions">
+          </div>
+
+          {gameState.phase !== "playing" && (
+            <div className="game-picker" aria-label={t("chooseGameTitle")}>
+              <article className="game-choice game-choice-culprit">
                 <button
                   type="button"
-                  className="secondary-button"
+                  className="secondary-button game-option-button"
                   onClick={handleOpenOptions}
                   disabled={!canOpenOptions}
                 >
                   {t("option")}
                 </button>
+                <div>
+                  <span className="label">{t("deductionGame")}</span>
+                  <h2>{t("title")}</h2>
+                  <p>{t("culpritLobbyDescription")}</p>
+                </div>
                 <button
                   type="button"
                   className="start-button"
-                  onClick={handleStartGame}
-                  disabled={!canPressStart}
+                  onClick={() => handleStartGame(GAME_TYPES.SHIFTING_CULPRIT)}
+                  disabled={!canStartCulprit}
                 >
-                  {t("startGame")}
+                  {t("startCulprit")}
                 </button>
-              </div>
-            )}
-          </div>
+              </article>
+              <article className="game-choice game-choice-mind">
+                <div>
+                  <span className="label">{t("wordGame")}</span>
+                  <h2>{t("mindWithWordsTitle")}</h2>
+                  <p>{t("mindLobbyDescription")}</p>
+                </div>
+                <button
+                  type="button"
+                  className="start-button mind-start-button"
+                  onClick={() => handleStartGame(GAME_TYPES.MIND_WITH_WORDS)}
+                  disabled={!canStartMind}
+                >
+                  {t("startMind")}
+                </button>
+              </article>
+            </div>
+          )}
 
           {gameState.phase !== "playing" && (
             <div className="name-box">
@@ -1076,7 +1140,7 @@ function App() {
                   {player.connected === false && <p>{t("disconnected")}</p>}
                   {player.isIntrigue && <p className="player-role-tag">{t("intrigue")}</p>}
                 </div>
-                {!player.spectator && (
+                {!player.spectator && isCulpritPlaying && (
                   <CardBackStack count={player.handCount} />
                 )}
               </div>
@@ -1087,7 +1151,7 @@ function App() {
         </article>
 
         <div className="center-column">
-          {gameState.phase === "playing" && (
+          {isCulpritPlaying && (
             <>
               <article className="panel center-panel">
                 <div className="panel-header">
@@ -1173,6 +1237,16 @@ function App() {
                 </button>
               </article>
             </>
+          )}
+          {isMindPlaying && (
+            <MindWithWordsGame
+              game={gameState.mindWithWords}
+              playerId={playerId}
+              socketRef={socketRef}
+              t={t}
+              setNotice={setNotice}
+              onReturnToLobby={handleReturnToLobby}
+            />
           )}
         </div>
       </section>

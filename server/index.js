@@ -3,6 +3,15 @@ import { existsSync, readFileSync } from "fs";
 import { createServer } from "http";
 import { join } from "path";
 import { WebSocketServer } from "ws";
+import {
+  GAME_TYPE as MIND_WITH_WORDS_GAME_TYPE,
+  MINIMUM_PLAYERS as MIND_WITH_WORDS_MINIMUM_PLAYERS,
+  canReturnToLobby as canReturnFromMindWithWords,
+  getClientState as getMindWithWordsClientState,
+  handleSocketMessage as handleMindWithWordsSocketMessage,
+  initializeGame as initializeMindWithWords,
+  resetGame as resetMindWithWords
+} from "./games/the-mind-with-words/game.js";
 
 const PORT = process.env.PORT || 3001;
 const MIN_PLAYERS = 3;
@@ -10,6 +19,10 @@ const MAX_PLAYERS = 7;
 const MIN_INITIAL_CARD_COUNT = 4;
 const RECONNECT_GRACE_PERIOD_MS = 3 * 60 * 1000;
 const ROOM_ID_PATTERN = /^[A-Z]{4}$/;
+const GAME_TYPES = {
+  SHIFTING_CULPRIT: "shifting_culprit",
+  MIND_WITH_WORDS: MIND_WITH_WORDS_GAME_TYPE
+};
 const CARD_TYPES = {
   CRIMINAL: "Criminal",
   FIRST_DISCOVERER: "First Discoverer",
@@ -74,6 +87,7 @@ function createRoom(roomId) {
     options: { ...DEFAULT_ROOM_OPTIONS },
     players: new Map(),
     phase: "lobby",
+    activeGame: null,
     currentPlayerId: null,
     turnOrder: [],
     discardPile: [],
@@ -196,14 +210,22 @@ function validateRoomOptions(room, nextOptions) {
   return null;
 }
 
-function canStartGame(room) {
+function canStartGame(room, gameType = GAME_TYPES.SHIFTING_CULPRIT) {
+  if (!Object.values(GAME_TYPES).includes(gameType)) {
+    return false;
+  }
+
+  const minimumPlayers =
+    gameType === GAME_TYPES.MIND_WITH_WORDS
+      ? MIND_WITH_WORDS_MINIMUM_PLAYERS
+      : MIN_PLAYERS;
   const optionsError = validateRoomOptions(room, room.options);
 
   return (
     room.phase !== "playing" &&
-    getConnectedPlayers(room).length >= MIN_PLAYERS &&
+    getConnectedPlayers(room).length >= minimumPlayers &&
     room.players.size <= MAX_PLAYERS &&
-    !optionsError
+    (gameType === GAME_TYPES.MIND_WITH_WORDS || !optionsError)
   );
 }
 
@@ -418,13 +440,22 @@ function broadcastState(room) {
         type: "state",
         roomId: room.id,
         phase: room.phase,
-        canStart: canStartGame(room),
+        activeGame: room.activeGame,
+        canStartGames: {
+          [GAME_TYPES.SHIFTING_CULPRIT]: canStartGame(room, GAME_TYPES.SHIFTING_CULPRIT),
+          [GAME_TYPES.MIND_WITH_WORDS]: canStartGame(room, GAME_TYPES.MIND_WITH_WORDS)
+        },
         currentPlayerId: room.currentPlayerId,
         players: gamePlayers,
         totalCardCount: TOTAL_CARD_COUNT,
         options: room.options,
         yourName: self?.name ?? "",
         yourHand: self?.hand ?? [],
+        mindWithWords: getMindWithWordsClientState(
+          room,
+          session.playerId,
+          getOrderedPlayers(room)
+        ),
         discardPile: room.discardPile,
         logEntries: room.logEntries,
         winner: room.winner,
@@ -805,6 +836,7 @@ function initializeGame(room) {
   const shuffledPlayerIds = shuffle(activePlayers.map((player) => player.id));
 
   room.phase = "playing";
+  room.activeGame = GAME_TYPES.SHIFTING_CULPRIT;
   room.currentPlayerId = null;
   room.discardPile = [];
   room.logEntries = [];
@@ -866,6 +898,7 @@ function initializeGame(room) {
 function resetToLobby(room) {
   clearTransientStateOnFinish(room);
   room.phase = "lobby";
+  room.activeGame = null;
   room.currentPlayerId = null;
   room.turnOrder = [];
   room.discardPile = [];
@@ -876,6 +909,7 @@ function resetToLobby(room) {
   room.turnsTakenInRound = 0;
   room.intriguePlayerIds = [];
   room.roundHasCriminalCard = true;
+  resetMindWithWords(room);
 
   for (const [id, player] of room.players.entries()) {
     if (!player.connected) {
@@ -2128,10 +2162,14 @@ wss.on("connection", (socket) => {
       }
 
       if (message.type === "start_game") {
-        if (!canStartGame(room)) {
+        const gameType = Object.values(GAME_TYPES).includes(message.gameType)
+          ? message.gameType
+          : GAME_TYPES.SHIFTING_CULPRIT;
+
+        if (!canStartGame(room, gameType)) {
           const optionsError = validateRoomOptions(room, room.options);
 
-          if (optionsError) {
+          if (gameType === GAME_TYPES.SHIFTING_CULPRIT && optionsError) {
             sendErrorKey(
               socket,
               optionsError.messageKey,
@@ -2141,11 +2179,24 @@ wss.on("connection", (socket) => {
             return;
           }
 
-          sendError(socket, `You need at least ${MIN_PLAYERS} players and no active round to start a game.`);
+          const minimumPlayers =
+            gameType === GAME_TYPES.MIND_WITH_WORDS
+              ? MIND_WITH_WORDS_MINIMUM_PLAYERS
+              : MIN_PLAYERS;
+          sendError(socket, `You need at least ${minimumPlayers} players and no active round to start this game.`);
           return;
         }
 
-        initializeGame(room);
+        if (gameType === GAME_TYPES.MIND_WITH_WORDS) {
+          initializeMindWithWords(room, {
+            getConnectedPlayers,
+            shuffle,
+            clearTransientStateOnFinish,
+            addLogEntry
+          });
+        } else {
+          initializeGame(room);
+        }
         broadcastState(room);
         return;
       }
@@ -2215,8 +2266,29 @@ wss.on("connection", (socket) => {
         return;
       }
 
+      if (
+        handleMindWithWordsSocketMessage({
+          room,
+          socket,
+          playerId: activePlayerId,
+          message,
+          helpers: {
+            sendError,
+            shuffle,
+            addLogEntry,
+            broadcastState,
+            getDisplayName
+          }
+        })
+      ) {
+        return;
+      }
+
       if (message.type === "return_to_lobby") {
-        if (room.phase !== "finished") {
+        if (
+          room.phase !== "finished" &&
+          !canReturnFromMindWithWords(room)
+        ) {
           sendError(socket, "You can only return to the lobby after the game ends.");
           return;
         }
