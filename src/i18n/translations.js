@@ -9,6 +9,7 @@ export const translations = {
     culpritLobbyDescription:
       "Unmask the culprit—or keep the truth shifting until your final card.",
     mindWithWordsTitle: "The Mind with Words",
+    mindEyebrow: "Cooperative Word Game Prototype",
     mindWithWordsSubcopy:
       "Tune in to the group, trust your instincts, and find the same wavelength without overthinking it.",
     mindLobbyDescription:
@@ -161,7 +162,7 @@ export const translations = {
   },
   ja: {
     gameLobby: "マルチプレイヤーゲームロビー",
-    chooseGameTitle: "ゲームを選ぶ",
+    chooseGameTitle: "せいすもどっとこむ",
     chooseGameSubcopy:
       "みんなで集まり、ルームコードを共有して、一緒に遊ぶゲームを選びましょう。",
     deductionGame: "推理カードゲーム",
@@ -169,6 +170,7 @@ export const translations = {
     culpritLobbyDescription:
       "犯人を見破るか、最後の1枚まで真相を揺さぶり続けましょう。",
     mindWithWordsTitle: "いと",
+    mindEyebrow: "数字を口にしたらアウト！",
     mindWithWordsSubcopy:
       "みんなの感覚に耳を澄ませ、直感を信じ、考えすぎずに心を合わせましょう。",
     mindLobbyDescription:

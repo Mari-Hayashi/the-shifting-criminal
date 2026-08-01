@@ -111,8 +111,7 @@ function createRoom(roomId) {
     mediaManipulationNotice: null,
     mediaManipulationNoticeTimeout: null,
     intriguePlayerIds: [],
-    roundHasCriminalCard: true,
-    mindWithWords: null
+    roundHasCriminalCard: true
   };
 }
 
@@ -442,7 +441,6 @@ function broadcastState(room) {
         roomId: room.id,
         phase: room.phase,
         activeGame: room.activeGame,
-        canStart: canStartGame(room, GAME_TYPES.SHIFTING_CULPRIT),
         canStartGames: {
           [GAME_TYPES.SHIFTING_CULPRIT]: canStartGame(room, GAME_TYPES.SHIFTING_CULPRIT),
           [GAME_TYPES.MIND_WITH_WORDS]: canStartGame(room, GAME_TYPES.MIND_WITH_WORDS)

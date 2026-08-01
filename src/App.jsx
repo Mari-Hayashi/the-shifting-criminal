@@ -114,7 +114,6 @@ function App() {
     phase: "lobby",
     activeGame: null,
     mindWithWords: null,
-    canStart: false,
     canStartGames: {
       shifting_culprit: false,
       mind_with_words: false
@@ -622,7 +621,7 @@ function App() {
       !gameState.gameError
   );
   const canStartCulprit =
-    (gameState.canStartGames?.[GAME_TYPES.SHIFTING_CULPRIT] ?? gameState.canStart) &&
+    Boolean(gameState.canStartGames?.[GAME_TYPES.SHIFTING_CULPRIT]) &&
     status === "Connected";
   const canStartMind =
     Boolean(gameState.canStartGames?.[GAME_TYPES.MIND_WITH_WORDS]) &&
@@ -1016,7 +1015,13 @@ function App() {
         >
           {t("languageLabel")}
         </button>
-        <p className="eyebrow">{gameState.phase === "lobby" ? t("gameLobby") : t("eyebrow")}</p>
+        <p className="eyebrow">
+          {gameState.phase === "lobby"
+            ? t("gameLobby")
+            : isMindPlaying
+              ? t("mindEyebrow")
+              : t("eyebrow")}
+        </p>
         <h1>
           {isMindPlaying
             ? t("mindWithWordsTitle")
